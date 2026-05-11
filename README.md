@@ -15,11 +15,10 @@ Caddy Manager 是一款支持交互式安装、配置 Caddy 并自动申请 SSL 
   自动添加官方 apt 源并安装最新版 Caddy，配置 systemd 服务并开机自启。
 
 - **自动申请 SSL 证书**  
-  支持 HTTP-01、TLS-ALPN-01、DNS-01（Cloudflare Token）验证方式。  
-  支持 Let’s Encrypt / ZeroSSL / Buypass 证书厂商选择。  
+  支持 HTTP-01、TLS-ALPN-01、DNS-01（Cloudflare Token）验证方式，证书由 Let's Encrypt 签发。
 
 - **交互式配置**  
-  提示用户输入域名、邮箱、反向代理目标、Cloudflare Token 等信息，支持测试环境。
+  提示用户输入域名、邮箱、反向代理目标、Cloudflare Token，输入时自动校验格式，Token 不回显。
 
 - **端口与系统检测**  
   自动检测 80/443 是否可用，检测操作系统类型及依赖安装。
@@ -39,16 +38,17 @@ Caddy Manager 是一款支持交互式安装、配置 Caddy 并自动申请 SSL 
 
 ### 在线执行
 
-新版（支持IPv4/IPv6自动检测，支持非80/443端口）
-
 ```bash
-bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/main.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/caddy.sh)
 ```
 
-旧版（仅支持IPv6）
+### 本地执行
 
 ```bash
-bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/caddy-manager.sh)
+git clone https://github.com/qianhu111/caddy-manager.git
+cd caddy-manager
+chmod +x caddy.sh
+sudo ./caddy.sh
 ```
 
 ### Cloudflare Token 获取方式
@@ -73,7 +73,7 @@ bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/
 | Zone Resources | Include → 指定你的域名（例如 example.com） |
 | DNS | Edit |
 
-6. 生成并保存 Token
+5. 生成并保存 Token
   * 点击 Continue to summary → Create Token。
   * 复制生成的 Token，并妥善保存（只显示一次）。
   > 脚本中使用这个 Token 时，可以直接填入 Cloudflare API Token 字段，或者导出环境变量 CF_API_TOKEN="你的Token"。
@@ -84,15 +84,13 @@ bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/
 
 执行脚本后，会显示以下菜单：
 
-1. 安装并配置 Caddy
+1. 安装并配置 Caddy (含证书申请)
 
-2. 检查 Caddy 状态
+2. Caddy 服务管理 / 日志（启动/停止/重启/日志/查看配置/证书查看）
 
-3. 管理 Caddy 服务（启动/停止/重启/日志/证书查看）
+3. 卸载 Caddy
 
-4. 卸载 Caddy
-
-5. 退出
+4. 退出
 
 根据提示输入数字选择对应操作。
 
@@ -101,7 +99,7 @@ bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/
 ## 安装流程说明
 
 1. 系统与依赖检测
-  自动识别 Ubuntu/Debian 系统，检查 curl、lsof、host、gnupg 等工具是否安装，缺失则自动安装。
+  自动识别 Debian/Ubuntu/CentOS/RHEL/Fedora/Alpine 等主流系统，检查 curl、lsof、host、gnupg、tar 等工具是否安装，缺失则自动安装。
 
 2. 域名解析检测
   检查域名是否解析到当前服务器 IP，若未解析，会提示用户确认是否继续。
@@ -126,6 +124,13 @@ bash <(curl -sSL https://raw.githubusercontent.com/qianhu111/caddy-manager/main/
 Caddyfile 示例：
 
 ```caddyfile
+{
+    storage file_system /var/lib/caddy
+    log {
+        output file /var/log/caddy/access.log
+    }
+}
+
 nameserver.example.com {
     encode gzip
     reverse_proxy 127.0.0.1:8888 {
@@ -140,8 +145,12 @@ nameserver.example.com {
 
 ## 系统兼容性
 
-* Ubuntu / Debian 系列（apt 包管理器）
-
+* Debian / Ubuntu / Kali（apt）
+* CentOS / RHEL / AlmaLinux / Rocky Linux（yum + copr）
+* Fedora（dnf + copr）
+* Alpine Linux（apk）
+* 其他系统：自动从 GitHub Release 下载预编译二进制
+* 支持架构：amd64 / arm64 / armv7
 * 需要 root 或 sudo 权限执行
 
 ---
@@ -152,18 +161,23 @@ nameserver.example.com {
 
 * 证书文件默认存放在 /var/lib/caddy/.local/share/caddy/certificates。
 
+* Cloudflare API Token 输入时不回显，通过独立 EnvironmentFile（/etc/caddy/caddy.env，权限 0640）加载，不会明文写入 systemd 服务文件。
+
 ---
 
 ## 卸载命令
 
-执行脚本选择“卸载 Caddy”，或手动执行：
+执行脚本选择"卸载 Caddy"，或手动执行：
 
 ```bash
 sudo systemctl stop caddy
 sudo systemctl disable caddy
-sudo rm -rf /etc/caddy /etc/ssl/caddy /usr/local/bin/caddy /etc/apt/sources.list.d/caddy-stable.list
-sudo rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-sudo apt remove --purge -y caddy
+sudo rm -f /etc/systemd/system/caddy.service
+sudo rm -rf /etc/caddy /var/lib/caddy /var/log/caddy
+sudo rm -f /usr/bin/caddy /usr/local/bin/caddy
+sudo rm -f /etc/apt/sources.list.d/caddy-stable.list
+sudo rm -f /usr/share/keyrings/caddy-archive-keyring.gpg
+sudo apt remove --purge -y caddy 2>/dev/null || true
 sudo systemctl daemon-reload
 ```
 
@@ -171,7 +185,7 @@ sudo systemctl daemon-reload
 
 ## 开源协议
 
-MIT License，详情请见 [LICENSE](https://github.com/qianhu111/caddy-manager/blob/7dbbffa389c11f90feef9fc2c1e97469beb432c7/LICENSE)。
+MIT License，详情请见 [LICENSE](LICENSE)。
 
 ---
 
